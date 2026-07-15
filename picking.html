@@ -12,14 +12,14 @@
       <h1>📦 ピッキング画面</h1>
       <div class="sub" id="staffBar"></div>
     </div>
+    <div class="top-link-row">
+      <a class="muted link-btn" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
+    </div>
     <div id="flash" class="flash"></div>
 
     <div id="detailBar" style="display:none">
       <div class="detail-inner">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <a class="muted link-btn" href="#" onclick="loadCaseList(); return false;">← 案件一覧に戻る</a>
-          <a class="muted link-btn" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
-        </div>
+        <a class="muted link-btn" href="#" onclick="loadCaseList(); return false;">← 案件一覧に戻る</a>
         <div class="card compact">
           <h2 id="caseTitle"></h2>
           <div class="muted" id="caseSub"></div>
