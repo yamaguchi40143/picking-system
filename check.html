@@ -31,10 +31,12 @@
           ⚠ ピッキング担当者とチェック担当者が同一人物です。相互チェックが機能しません。
         </div>
         <div class="scan-box">
-          <input type="text" id="scanInput" class="scan-input" inputmode="text"
-                 autocomplete="off" autocapitalize="off" spellcheck="false"
-                 placeholder="バーコードをスキャン、または入力してEnter">
-          <button type="button" id="cameraBtn" class="camera-btn">📷 カメラでスキャン</button>
+          <div class="scan-row">
+            <input type="text" id="scanInput" class="scan-input" inputmode="text"
+                   autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="バーコードをスキャン、または入力してEnter">
+            <button type="button" id="cameraBtn" class="camera-btn" aria-label="カメラでスキャン">📷</button>
+          </div>
           <video id="scanVideo" class="scan-video" style="display:none" playsinline muted></video>
         </div>
       </div>
@@ -116,7 +118,9 @@
     FOCUSED_BARCODE = null;
     CASE_OPENING = false;
     showListScreen();
-    document.getElementById('screen').innerHTML = '<div class="loading">案件を読み込み中...</div>';
+    var screenEl = document.getElementById('screen');
+    screenEl.classList.remove('case-list-loading');
+    screenEl.innerHTML = '<div class="loading">案件を読み込み中...</div>';
     apiGet('getCheckableCases', {}).then(renderCaseList).catch(fatal);
   }
 
@@ -159,7 +163,11 @@
       el.insertAdjacentHTML('beforeend', '<div class="case-line muted">読み込み中...</div>');
     }
     apiGet('getCheckCase', { caseId: caseId, staffId: STAFF.id })
-      .then(function (data) { CASE_OPENING = false; renderCase(data); })
+      .then(function (data) {
+        CASE_OPENING = false;
+        document.getElementById('screen').classList.remove('case-list-loading');
+        renderCase(data);
+      })
       .catch(function (err) {
         CASE_OPENING = false;
         document.getElementById('screen').classList.remove('case-list-loading');
