@@ -5,8 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理画面</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // トップメニュー（index.html）を経由せずに直接このURLを開いた場合はトップメニューへ戻す
+    if (!sessionStorage.getItem('pickingAppEntered')) { location.replace('index.html'); }
+  </script>
 </head>
 <body>
+  <div class="top-link-row">
+    <a class="muted link-btn top-menu-link" href="index.html">トップメニューに戻る</a>
+  </div>
   <div class="header">
     <h1>🛠 管理画面</h1>
   </div>
