@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ピッキング＆チェックシステム</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // 各画面（picking/check/admin.html）は、このトップメニューを経由して開かれたことを
+    // sessionStorageのフラグで確認する（無ければトップメニューへ戻す）。タブ（セッション）を
+    // 閉じるまで有効。ブックマークや直接URL入力での各画面への直接アクセスを防ぐ目的。
+    sessionStorage.setItem('pickingAppEntered', '1');
+  </script>
 </head>
 <body>
   <div class="header">
