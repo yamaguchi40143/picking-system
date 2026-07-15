@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理画面</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>🛠 管理画面</h1>
+  </div>
+  <div class="wrap">
+    <div id="screen" class="loading">読み込み中...</div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="helpers.js"></script>
+
+<script>
+  var ACTIVE_TAB = 'csv';
+  var TABS = ['csv', 'progress', 'logs'];
+
+  window.addEventListener('load', function () {
+    renderShell();
+    openTab('csv');
+  });
+
+  function renderShell() {
+    document.getElementById('screen').innerHTML =
+      '<div class="tabs">' +
+      '<button id="tabBtn_csv" onclick="openTab(\'csv\')">CSV取込</button>' +
+      '<button id="tabBtn_progress" onclick="openTab(\'progress\')">案件進捗</button>' +
+      '<button id="tabBtn_logs" onclick="openTab(\'logs\')">ログ・差異</button>' +
+      '</div>' +
+      '<div id="tabBody"></div>';
+  }
+
+  function openTab(tab) {
+    ACTIVE_TAB = tab;
+    TABS.forEach(function (t) {
+      var el = document.getElementById('tabBtn_' + t);
+      if (el) el.className = (t === tab) ? 'active' : '';
+    });
+    document.getElementById('tabBody').innerHTML = '<div class="loading">読み込み中...</div>';
+    if (tab === 'csv') renderCsvImport();
+    if (tab === 'progress') loadProgress();
+    if (tab === 'logs') loadLogs();
+  }
+
+  /* ---------------- CSV取込 ---------------- */
+  function renderCsvImport() {
+    document.getElementById('tabBody').innerHTML =
+      '<div class="card">' +
+      '<h2>出荷指示CSVを取り込む</h2>' +
+      '<p class="muted">基幹システムが出力するCSV（Shift-JIS）を選んでください。ブラウザ上で読み込み、' +
+      'このApps Script自身が解析し、案件マスタ・ピッキング明細へその場で反映します' +
+      '（確認画面は挟みません。外部ツールも使いません）。</p>' +
+      '<label>CSVファイル</label>' +
+      '<input type="file" id="csvFileInput" accept=".csv">' +
+      '<button class="primary" style="margin-top:12px" id="csvImportBtn" onclick="doImportCsv()">取り込む</button>' +
+      '<div id="csvImportResult" style="margin-top:14px"></div>' +
+      '</div>';
+  }
+
+  function doImportCsv() {
+    var input = document.getElementById('csvFileInput');
+    var file = input.files && input.files[0];
+    if (!file) { alert('CSVファイルを選択してください。'); return; }
+
+    var btn = document.getElementById('csvImportBtn');
+    btn.disabled = true;
+    btn.textContent = '取込中...';
+    document.getElementById('csvImportResult').innerHTML = '';
+
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      // readAsDataURLの結果は "data:...;base64,XXXX" 形式なのでbase64部分だけ取り出す
+      var base64 = String(e.target.result).split(',')[1] || '';
+      apiPost('importCsvContent', { base64Content: base64 })
+        .then(function (summary) { onCsvImportResult(summary, null); })
+        .catch(function (err) { onCsvImportResult(null, err); });
+    };
+    reader.onerror = function () {
+      onCsvImportResult(null, { message: 'ファイルの読み込みに失敗しました。' });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function onCsvImportResult(summary, err) {
+    var btn = document.getElementById('csvImportBtn');
+    btn.disabled = false;
+    btn.textContent = '取り込む';
+
+    var el = document.getElementById('csvImportResult');
+    if (err) {
+      el.innerHTML = '<div class="error-banner">取込に失敗しました：' + escapeHtml(err.message || String(err)) + '</div>';
+      return;
+    }
+    el.innerHTML =
+      '<div class="ok-banner">' +
+      '新規案件：' + summary.new_cases + '　更新案件：' + summary.updated_cases + '　' +
+      '新規品目：' + summary.new_items + '　更新品目：' + summary.updated_items +
+      (summary.flagged_cases ? '　要確認：' + summary.flagged_cases + '案件（案件進捗で確認してください）' : '') +
+      '</div>' +
+      (summary.backup_url ?
+        '<p class="muted">取込前のデータは別ファイルに保存しました：' +
+        '<a href="' + escapeHtml(summary.backup_url) + '" target="_blank">' + escapeHtml(summary.backup_url) + '</a></p>' : '') +
+      '<a class="menu-btn" href="#" onclick="openTab(\'progress\'); return false;" style="margin-top:10px">案件進捗を確認する →</a>';
+  }
+
+  /* ---------------- 案件進捗 ---------------- */
+  function loadProgress() {
+    apiGet('getCaseProgress', {}).then(renderProgress).catch(tabError);
+  }
+  function renderProgress(cases) {
+    cases = cases || [];
+    if (!cases.length) {
+      document.getElementById('tabBody').innerHTML = '<p class="muted">案件がまだありません。</p>';
+      return;
+    }
+    var rows = cases.map(function (c) {
+      return '<tr>' +
+        '<td>' + escapeHtml(c.案件ID) + '</td>' +
+        '<td>' + escapeHtml(c.発注所属名 || c.宛先氏名) + '</td>' +
+        '<td>' + escapeHtml(c.物件名 || '') + '</td>' +
+        '<td>' + escapeHtml(c.出荷指定日) + '</td>' +
+        '<td><span class="badge status-' + c.ステータス + '">' + c.ステータス + '</span>' +
+        (c.要確認理由 ? '<div class="muted" style="margin-top:4px">' + escapeHtml(c.要確認理由) + '</div>' : '') + '</td>' +
+        '<td>' + c.ピッキング済合計 + '/' + c.必要数合計 + '</td>' +
+        '<td>' + c.チェック済合計 + '/' + c.必要数合計 + '</td>' +
+        '<td>' + escapeHtml((c.ピッキング担当者一覧 || []).join('、')) + '</td>' +
+        '<td>' + escapeHtml((c.チェック担当者一覧 || []).join('、')) + '</td>' +
+        '<td>' + escapeHtml(c.最終ピッキング日時 || '') + '</td>' +
+        '<td>' + escapeHtml(c.最終チェック日時 || '') + '</td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('tabBody').innerHTML =
+      '<div class="card"><div style="overflow-x:auto"><table>' +
+      '<tr><th>案件ID</th><th>出荷先</th><th>物件名</th><th>出荷指定日</th><th>ステータス</th>' +
+      '<th>ピッキング</th><th>チェック</th><th>ピッキング担当</th><th>チェック担当</th>' +
+      '<th>最終ピッキング日時</th><th>最終チェック日時</th></tr>' +
+      rows + '</table></div></div>';
+  }
+
+  /* ---------------- ログ・差異 ---------------- */
+  function loadLogs() {
+    apiGet('getDiffCases', {})
+      .then(function (diffs) {
+        return apiGet('getWorkLogs', { limit: 200 }).then(function (logs) { renderLogs(diffs, logs); });
+      })
+      .catch(tabError);
+  }
+  function renderLogs(diffs, logs) {
+    diffs = diffs || [];
+    logs = logs || [];
+    var diffHtml = '<p class="muted">要確認の案件はありません。</p>';
+    if (diffs.length) {
+      diffHtml = diffs.map(function (d) {
+        var rows = d.diffs.map(function (x) {
+          return '<tr><td>' + escapeHtml(x.品目名) + '</td><td>' + escapeHtml(x.バーコード) + '</td>' +
+            '<td>' + x.ピッキング済数 + '</td><td>' + x.チェック済数 + '</td><td>' + escapeHtml(x.差異フラグ || '') + '</td>' +
+            '<td>' + escapeHtml(x.差異理由 || '') + '</td></tr>';
+        }).join('');
+        return '<div class="card"><h2>' + escapeHtml(d.発注所属名 || d.宛先氏名 || d.案件ID) + '</h2>' +
+          (d.要確認理由 ? '<div class="warn-banner">要確認理由：' + escapeHtml(d.要確認理由) + '</div>' : '') +
+          '<div style="overflow-x:auto"><table><tr><th>品目名</th><th>バーコード</th><th>ピッキング済</th><th>チェック済</th><th>差異</th><th>差異理由</th></tr>' +
+          rows + '</table></div></div>';
+      }).join('');
+    }
+    var logRows = logs.map(function (l) {
+      return '<tr><td>' + escapeHtml(l.日時) + '</td><td>' + escapeHtml(l.案件ID) + '</td>' +
+        '<td>' + escapeHtml(l.画面) + '</td><td>' + escapeHtml(l.担当者) + '</td>' +
+        '<td>' + escapeHtml(l.バーコード) + '</td><td>' + escapeHtml(l.結果) + '</td></tr>';
+    }).join('');
+    document.getElementById('tabBody').innerHTML =
+      '<h2 style="margin:6px 0">要確認の差異</h2>' + diffHtml +
+      '<div class="card"><h2>作業ログ（直近200件）</h2><div style="overflow-x:auto"><table>' +
+      '<tr><th>日時</th><th>案件ID</th><th>画面</th><th>担当者</th><th>バーコード</th><th>結果</th></tr>' +
+      logRows + '</table></div></div>';
+  }
+
+  function tabError(err) {
+    document.getElementById('tabBody').innerHTML =
+      '<div class="error-banner">エラー：' + escapeHtml(err.message || String(err)) + '</div>';
+  }
+</script>
+</body>
+</html>

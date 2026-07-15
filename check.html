@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>チェック画面</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="sticky-top">
+    <div class="header">
+      <h1>✅ チェック画面</h1>
+      <div class="sub" id="staffBar"></div>
+    </div>
+    <div id="flash" class="flash"></div>
+
+    <div id="detailBar" style="display:none">
+      <div class="detail-inner">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <a class="muted link-btn" href="#" onclick="loadCaseList(); return false;">← 案件一覧に戻る</a>
+          <a class="muted link-btn" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
+        </div>
+        <div class="card compact">
+          <h2 id="caseTitle"></h2>
+          <div class="muted" id="caseSub"></div>
+          <div class="summary-line" id="caseSummary"></div>
+          <div class="muted" id="caseStaffList"></div>
+          <div class="warn-text" id="caseReasonLine" style="display:none"></div>
+        </div>
+        <div id="samePersonWarning" class="warn-banner" style="display:none">
+          ⚠ ピッキング担当者とチェック担当者が同一人物です。相互チェックが機能しません。
+        </div>
+        <div class="scan-box">
+          <input type="text" id="scanInput" class="scan-input" inputmode="text"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 placeholder="バーコードをスキャン、または入力してEnter">
+          <button type="button" id="cameraBtn" class="camera-btn">📷 カメラでスキャン</button>
+          <video id="scanVideo" class="scan-video" style="display:none" playsinline muted></video>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div id="screen" class="loading">読み込み中...</div>
+    <div id="itemList" style="display:none"></div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="helpers.js"></script>
+  <script src="staffSelect.js"></script>
+
+<script>
+  var STAFF = null;
+  var CURRENT_CASE = null;
+  var FOCUSED_BARCODE = null;
+  var REQUEST_PENDING = false;
+  var CASE_OPENING = false;
+
+  window.addEventListener('load', function () {
+    requireStaff(function (staff) {
+      STAFF = staff;
+      document.getElementById('staffBar').innerHTML =
+        '担当者：' + escapeHtml(staff.name) + '　<a href="#" class="link-btn" onclick="handleSwitchStaffClick(); return false;" style="color:#dce8f7">切替</a>';
+      loadCaseList();
+    });
+  });
+
+  window.onStaffSwitched = function () {
+    STAFF = null;
+    showListScreen();
+    requireStaff(function (staff) {
+      STAFF = staff;
+      document.getElementById('staffBar').innerHTML =
+        '担当者：' + escapeHtml(staff.name) + '　<a href="#" class="link-btn" onclick="handleSwitchStaffClick(); return false;" style="color:#dce8f7">切替</a>';
+      loadCaseList();
+    });
+  };
+
+  /** 処理中（REQUEST_PENDING）は担当者切替を行わせない */
+  function handleSwitchStaffClick() {
+    if (REQUEST_PENDING) {
+      showFlash('warn', '処理が完了するまでお待ちください。');
+      return;
+    }
+    switchStaff();
+  }
+
+  /** 処理中（REQUEST_PENDING）はトップメニューへの遷移も行わせない */
+  function handleTopMenuClick() {
+    if (REQUEST_PENDING) {
+      showFlash('warn', '処理が完了するまでお待ちください。');
+      return false;
+    }
+    return true;
+  }
+
+  function showListScreen() {
+    document.getElementById('detailBar').style.display = 'none';
+    document.getElementById('itemList').style.display = 'none';
+    document.getElementById('screen').style.display = 'block';
+  }
+
+  function showDetailScreen() {
+    document.getElementById('screen').style.display = 'none';
+    document.getElementById('detailBar').style.display = 'block';
+    document.getElementById('itemList').style.display = 'block';
+  }
+
+  function loadCaseList() {
+    if (REQUEST_PENDING) {
+      showFlash('warn', '処理が完了するまでお待ちください。');
+      return;
+    }
+    CURRENT_CASE = null;
+    FOCUSED_BARCODE = null;
+    CASE_OPENING = false;
+    showListScreen();
+    document.getElementById('screen').innerHTML = '<div class="loading">案件を読み込み中...</div>';
+    apiGet('getCheckableCases', {}).then(renderCaseList).catch(fatal);
+  }
+
+  function renderCaseList(cases) {
+    cases = cases || [];
+    if (!cases.length) {
+      document.getElementById('screen').innerHTML =
+        '<div class="card"><p class="muted">案件がありません。</p>' +
+        '<a class="menu-btn" href="index.html">トップ画面へ</a></div>';
+      return;
+    }
+    var html = '';
+    cases.forEach(function (c) {
+      var pickerText = (c.ピッキング担当者一覧 && c.ピッキング担当者一覧.length) ? c.ピッキング担当者一覧.join('、') : '－';
+      var checkerText = (c.チェック担当者一覧 && c.チェック担当者一覧.length) ? c.チェック担当者一覧.join('、') : '未着手';
+      html += '<div class="list-item case-row" onclick="openCase(\'' + c.案件ID + '\', this)">' +
+        '<div class="case-line item-name">' + escapeHtml(c.発注所属名 || c.宛先氏名 || c.案件ID) + '</div>' +
+        (c.物件名 ? '<div class="case-line muted">物件名：' + escapeHtml(c.物件名) + '</div>' : '') +
+        '<div class="case-line muted">出荷指定日：' + escapeHtml(c.出荷指定日) + '</div>' +
+        '<div class="case-line muted">ピッキング済み：' + c.ピッキング済品目数 + ' / ' + c.品目数 +
+        '　チェック完了：' + c.完了品目数 + ' / ' + c.品目数 + '</div>' +
+        '<div class="case-line muted">ピッキング：' + escapeHtml(pickerText) + '</div>' +
+        '<div class="case-line muted">チェック：' + escapeHtml(checkerText) + '</div>' +
+        '<div class="case-line">' +
+        '<span class="badge status-' + c.ステータス + '">' + c.ステータス + '</span>' +
+        (c.差し戻しあり ? ' <span class="badge status-差し戻し">差し戻しあり</span>' : '') +
+        '</div>' +
+        (c.要確認理由 ? '<div class="case-line warn-text">' + escapeHtml(c.要確認理由) + '</div>' : '') +
+        '</div>';
+    });
+    document.getElementById('screen').innerHTML = html;
+  }
+
+  function openCase(caseId, el) {
+    if (CASE_OPENING) return;
+    CASE_OPENING = true;
+    document.getElementById('screen').classList.add('case-list-loading');
+    if (el) {
+      el.classList.add('opening');
+      el.insertAdjacentHTML('beforeend', '<div class="case-line muted">読み込み中...</div>');
+    }
+    apiGet('getCheckCase', { caseId: caseId, staffId: STAFF.id })
+      .then(function (data) { CASE_OPENING = false; renderCase(data); })
+      .catch(function (err) {
+        CASE_OPENING = false;
+        document.getElementById('screen').classList.remove('case-list-loading');
+        fatal(err);
+      });
+  }
+
+  function renderCase(data) {
+    CURRENT_CASE = data;
+    FOCUSED_BARCODE = null;
+    REQUEST_PENDING = false;
+    document.getElementById('caseTitle').textContent = data.caseInfo.発注所属名 || data.caseInfo.宛先氏名;
+    document.getElementById('caseSub').innerHTML =
+      (data.caseInfo.物件名 ? '<div>物件名：' + escapeHtml(data.caseInfo.物件名) + '</div>' : '') +
+      '<div>出荷指定日：' + escapeHtml(data.caseInfo.出荷指定日 || '') + '</div>';
+    document.getElementById('samePersonWarning').style.display = data.caseInfo.samePersonWarning ? 'block' : 'none';
+    updateCaseSummary();
+    showDetailScreen();
+    renderItemList();
+  }
+
+  function updateCaseSummary() {
+    var doneCount = CURRENT_CASE.items.filter(function (i) { return i.ピッキング済数 > 0 && i.チェック済数 >= i.ピッキング済数; }).length;
+    var pickedCount = CURRENT_CASE.items.filter(function (i) { return i.ピッキング済数 > 0; }).length;
+    CURRENT_CASE.caseInfo.完了品目数 = doneCount;
+    document.getElementById('caseSummary').textContent =
+      'ピッキング済み：' + pickedCount + ' / ' + CURRENT_CASE.items.length +
+      '　チェック完了：' + doneCount + ' / ' + CURRENT_CASE.items.length;
+    var pickers = CURRENT_CASE.caseInfo.ピッキング担当者一覧 || [];
+    var checkers = CURRENT_CASE.caseInfo.チェック担当者一覧 || [];
+    document.getElementById('caseStaffList').textContent =
+      'ピッキング：' + (pickers.length ? pickers.join('、') : '－') +
+      '　チェック：' + (checkers.length ? checkers.join('、') : '未着手');
+    var reasonEl = document.getElementById('caseReasonLine');
+    var reason = CURRENT_CASE.caseInfo.要確認理由;
+    reasonEl.style.display = reason ? 'block' : 'none';
+    reasonEl.textContent = reason ? '要確認理由：' + reason : '';
+  }
+
+  function renderItemList() {
+    var html = '';
+    CURRENT_CASE.items.forEach(function (it) {
+      var done = it.ピッキング済数 > 0 && it.チェック済数 >= it.ピッキング済数;
+      var focused = FOCUSED_BARCODE === it.バーコード;
+      var cls = 'list-item item-row' + (done ? ' done' : '') + (focused ? ' focused' : '');
+      var pickerText = (it.ピッキング担当者一覧 && it.ピッキング担当者一覧.length) ? it.ピッキング担当者一覧.join('、') : '';
+      var checkerText = (it.チェック担当者一覧 && it.チェック担当者一覧.length) ? it.チェック担当者一覧.join('、') : '';
+      var staffLine = '';
+      if (pickerText) staffLine += 'ピッキング：' + escapeHtml(pickerText);
+      if (checkerText) staffLine += (staffLine ? '　' : '') + 'チェック：' + escapeHtml(checkerText);
+      var revertBadge = it.差異フラグ === '差し戻し' ?
+        '<div class="item-staff-line warn-text">↩ 差し戻し済み' + (it.差異理由 ? '：' + escapeHtml(it.差異理由) : '') + '</div>' : '';
+      html += '<div class="' + cls + '" onclick="selectItem(\'' + jsStr(it.バーコード) + '\')">' +
+        '<div class="item-row-top">' +
+        '<div><div class="item-code">' + escapeHtml(it.バーコード) + '</div>' +
+        '<div class="item-name-sub">' + escapeHtml(it.品目名) + '</div></div>' +
+        '<div class="qty">' + it.チェック済数 + ' / ' + it.ピッキング済数 + '</div>' +
+        '</div>' +
+        (staffLine ? '<div class="item-staff-line">' + staffLine + '</div>' : '') +
+        revertBadge +
+        (focused ? renderFocusedActions_() : '') +
+        '</div>';
+    });
+    document.getElementById('itemList').className = REQUEST_PENDING ? 'list-locked' : '';
+    document.getElementById('itemList').innerHTML = html;
+
+    if (FOCUSED_BARCODE) {
+      var el = document.querySelector('.list-item.focused');
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  function renderFocusedActions_() {
+    if (REQUEST_PENDING) return '<div class="processing-label">処理中...</div>';
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(FOCUSED_BARCODE); });
+    var picked = item ? item.ピッキング済数 : 0;
+    var checked = item ? item.チェック済数 : 0;
+    if (picked <= 0) {
+      return '<div class="processing-label">まだピッキングされていません</div>';
+    }
+    if (checked >= picked) {
+      // チェック済みの品目は再度チェック終了できないが、差し戻しはいつでも可能にしておく
+      return '<div class="processing-label">チェック済みです（再度の操作はできません）</div>' +
+        '<button class="danger item-revert-btn" onclick="revertItem(\'' + jsStr(FOCUSED_BARCODE) + '\')">差し戻し</button>';
+    }
+    return '<button class="primary item-complete-btn" onclick="completeItem(\'' + jsStr(FOCUSED_BARCODE) + '\')">チェック終了</button>' +
+      '<button class="danger item-revert-btn" onclick="revertItem(\'' + jsStr(FOCUSED_BARCODE) + '\')">差し戻し</button>';
+  }
+
+  function selectItem(barcode) {
+    if (!CURRENT_CASE || REQUEST_PENDING) return;
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(barcode); });
+    if (!item) return;
+    FOCUSED_BARCODE = barcode;
+    renderItemList();
+  }
+
+  window.handleScan = function (code) {
+    if (!CURRENT_CASE || REQUEST_PENDING) return;
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(code); });
+    if (!item) {
+      showFlash('err', 'ピッキング明細に含まれないバーコードです。');
+      return;
+    }
+    selectItem(item.バーコード);
+  };
+
+  function completeItem(barcode) {
+    if (!CURRENT_CASE || REQUEST_PENDING) return;
+    REQUEST_PENDING = true;
+    renderItemList();
+    apiPost('completeCheckItem', { caseId: CURRENT_CASE.caseInfo.案件ID, barcode: barcode, staffId: STAFF.id })
+      .then(function (res) { REQUEST_PENDING = false; onCompleteResult(res); })
+      .catch(function (err) {
+        REQUEST_PENDING = false;
+        renderItemList();
+        showFlash('err', err.message || String(err));
+      });
+  }
+
+  function onCompleteResult(res) {
+    if (res.result === 'error') {
+      showFlash('err', res.message);
+      renderItemList();
+      return;
+    }
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(res.barcode); });
+    if (item) {
+      item.チェック済数 = res.checked;
+      item.チェック担当者一覧 = item.チェック担当者一覧 || [];
+      if (item.チェック担当者一覧.indexOf(res.staffName) === -1) item.チェック担当者一覧.push(res.staffName);
+    }
+    if (CURRENT_CASE.caseInfo.チェック担当者一覧.indexOf(res.staffName) === -1) {
+      CURRENT_CASE.caseInfo.チェック担当者一覧.push(res.staffName);
+    }
+    CURRENT_CASE.caseInfo.ステータス = res.caseStatus;
+    FOCUSED_BARCODE = null;
+    updateCaseSummary();
+    renderItemList();
+
+    if (res.caseStatus === '要確認') {
+      showFlash('warn', '差異があります。案件は「要確認」になりました。');
+    }
+  }
+
+  function revertItem(barcode) {
+    if (!CURRENT_CASE || REQUEST_PENDING) return;
+    var reason = prompt('差し戻しの理由を入力してください（空でも構いません）', '');
+    if (reason === null) return;
+    REQUEST_PENDING = true;
+    renderItemList();
+    apiPost('revertCheckItem', { caseId: CURRENT_CASE.caseInfo.案件ID, barcode: barcode, staffId: STAFF.id, reason: reason })
+      .then(function (res) { REQUEST_PENDING = false; onRevertResult(res); })
+      .catch(function (err) {
+        REQUEST_PENDING = false;
+        renderItemList();
+        showFlash('err', err.message || String(err));
+      });
+  }
+
+  function onRevertResult(res) {
+    if (res.result === 'error') {
+      showFlash('err', res.message);
+      renderItemList();
+      return;
+    }
+    showFlash('warn', res.itemName + ' を差し戻しました');
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(res.barcode); });
+    if (item) {
+      item.ピッキング済数 = 0;
+      item.チェック済数 = 0;
+      item.ピッキング担当者一覧 = [];
+      item.チェック担当者一覧 = [];
+      item.差異フラグ = '差し戻し';
+      item.差異理由 = res.reason || '';
+    }
+    CURRENT_CASE.caseInfo.ステータス = '要確認';
+    CURRENT_CASE.caseInfo.要確認理由 = '品目「' + res.itemName + '」が差し戻されました：' + (res.reason || '');
+    FOCUSED_BARCODE = null;
+    updateCaseSummary();
+    renderItemList();
+  }
+
+  function fatal(err) {
+    showListScreen();
+    document.getElementById('screen').innerHTML =
+      '<div class="card"><div class="error-banner">エラー：' + escapeHtml(err.message || String(err)) + '</div></div>';
+  }
+
+  /** バーコード文字列をシングルクォートのJS文字列リテラルとして安全に埋め込む */
+  function jsStr(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+</script>
+  <script src="scanner.js"></script>
+</body>
+</html>

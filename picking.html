@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ピッキング画面</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="sticky-top">
+    <div class="header">
+      <h1>📦 ピッキング画面</h1>
+      <div class="sub" id="staffBar"></div>
+    </div>
+    <div id="flash" class="flash"></div>
+
+    <div id="detailBar" style="display:none">
+      <div class="detail-inner">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <a class="muted link-btn" href="#" onclick="loadCaseList(); return false;">← 案件一覧に戻る</a>
+          <a class="muted link-btn" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
+        </div>
+        <div class="card compact">
+          <h2 id="caseTitle"></h2>
+          <div class="muted" id="caseSub"></div>
+          <div class="summary-line" id="caseSummary"></div>
+          <div class="muted" id="caseStaffList"></div>
+          <div class="warn-text" id="caseReasonLine" style="display:none"></div>
+        </div>
+        <div class="scan-box">
+          <input type="text" id="scanInput" class="scan-input" inputmode="text"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 placeholder="バーコードをスキャン、または入力してEnter">
+          <button type="button" id="cameraBtn" class="camera-btn">📷 カメラでスキャン</button>
+          <video id="scanVideo" class="scan-video" style="display:none" playsinline muted></video>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div id="screen" class="loading">読み込み中...</div>
+    <div id="itemList" style="display:none"></div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="helpers.js"></script>
+  <script src="staffSelect.js"></script>
+
+<script>
+  var STAFF = null;
+  var CURRENT_CASE = null;
+  var FOCUSED_BARCODE = null;
+  var REQUEST_PENDING = false;
+  var CASE_OPENING = false;
+
+  window.addEventListener('load', function () {
+    requireStaff(function (staff) {
+      STAFF = staff;
+      document.getElementById('staffBar').innerHTML =
+        '担当者：' + escapeHtml(staff.name) + '　<a href="#" class="link-btn" onclick="handleSwitchStaffClick(); return false;" style="color:#dce8f7">切替</a>';
+      loadCaseList();
+    });
+  });
+
+  window.onStaffSwitched = function () {
+    STAFF = null;
+    showListScreen();
+    requireStaff(function (staff) {
+      STAFF = staff;
+      document.getElementById('staffBar').innerHTML =
+        '担当者：' + escapeHtml(staff.name) + '　<a href="#" class="link-btn" onclick="handleSwitchStaffClick(); return false;" style="color:#dce8f7">切替</a>';
+      loadCaseList();
+    });
+  };
+
+  /** 処理中（REQUEST_PENDING）は担当者切替を行わせない */
+  function handleSwitchStaffClick() {
+    if (REQUEST_PENDING) {
+      showFlash('warn', '処理が完了するまでお待ちください。');
+      return;
+    }
+    switchStaff();
+  }
+
+  /** 処理中（REQUEST_PENDING）はトップメニューへの遷移も行わせない */
+  function handleTopMenuClick() {
+    if (REQUEST_PENDING) {
+      showFlash('warn', '処理が完了するまでお待ちください。');
+      return false;
+    }
+    return true;
+  }
+
+  function showListScreen() {
+    document.getElementById('detailBar').style.display = 'none';
+    document.getElementById('itemList').style.display = 'none';
+    document.getElementById('screen').style.display = 'block';
+  }
+
+  function showDetailScreen() {
+    document.getElementById('screen').style.display = 'none';
+    document.getElementById('detailBar').style.display = 'block';
+    document.getElementById('itemList').style.display = 'block';
+  }
+
+  function loadCaseList() {
+    if (REQUEST_PENDING) {
+      showFlash('warn', '処理が完了するまでお待ちください。');
+      return;
+    }
+    CURRENT_CASE = null;
+    FOCUSED_BARCODE = null;
+    CASE_OPENING = false;
+    showListScreen();
+    document.getElementById('screen').innerHTML = '<div class="loading">案件を読み込み中...</div>';
+    apiGet('getPickableCases', {}).then(renderCaseList).catch(fatal);
+  }
+
+  function renderCaseList(cases) {
+    cases = cases || [];
+    if (!cases.length) {
+      document.getElementById('screen').innerHTML =
+        '<div class="card"><p class="muted">案件がありません。</p>' +
+        '<a class="menu-btn" href="index.html">トップ画面へ</a></div>';
+      return;
+    }
+    var html = '';
+    cases.forEach(function (c) {
+      var staffText = (c.担当者一覧 && c.担当者一覧.length) ? c.担当者一覧.join('、') : '未着手';
+      html += '<div class="list-item case-row" onclick="openCase(\'' + c.案件ID + '\', this)">' +
+        '<div class="case-line item-name">' + escapeHtml(c.発注所属名 || c.宛先氏名 || c.案件ID) + '</div>' +
+        (c.物件名 ? '<div class="case-line muted">物件名：' + escapeHtml(c.物件名) + '</div>' : '') +
+        '<div class="case-line muted">出荷指定日：' + escapeHtml(c.出荷指定日) + '</div>' +
+        '<div class="case-line muted">品目：' + c.完了品目数 + ' / ' + c.品目数 + '</div>' +
+        '<div class="case-line muted">担当：' + escapeHtml(staffText) + '</div>' +
+        '<div class="case-line">' +
+        '<span class="badge status-' + c.ステータス + '">' + c.ステータス + '</span>' +
+        (c.差し戻しあり ? ' <span class="badge status-差し戻し">差し戻しあり</span>' : '') +
+        '</div>' +
+        (c.要確認理由 ? '<div class="case-line warn-text">' + escapeHtml(c.要確認理由) + '</div>' : '') +
+        '</div>';
+    });
+    document.getElementById('screen').innerHTML = html;
+  }
+
+  function openCase(caseId, el) {
+    if (CASE_OPENING) return;
+    CASE_OPENING = true;
+    document.getElementById('screen').classList.add('case-list-loading');
+    if (el) {
+      el.classList.add('opening');
+      el.insertAdjacentHTML('beforeend', '<div class="case-line muted">読み込み中...</div>');
+    }
+    apiGet('getPickingCase', { caseId: caseId })
+      .then(function (data) { CASE_OPENING = false; renderCase(data); })
+      .catch(function (err) {
+        CASE_OPENING = false;
+        document.getElementById('screen').classList.remove('case-list-loading');
+        fatal(err);
+      });
+  }
+
+  function renderCase(data) {
+    CURRENT_CASE = data;
+    FOCUSED_BARCODE = null;
+    REQUEST_PENDING = false;
+    document.getElementById('caseTitle').textContent = data.caseInfo.発注所属名 || data.caseInfo.宛先氏名;
+    document.getElementById('caseSub').innerHTML =
+      (data.caseInfo.物件名 ? '<div>物件名：' + escapeHtml(data.caseInfo.物件名) + '</div>' : '') +
+      '<div>出荷指定日：' + escapeHtml(data.caseInfo.出荷指定日 || '') + '</div>';
+    updateCaseSummary();
+    showDetailScreen();
+    renderItemList();
+  }
+
+  function updateCaseSummary() {
+    var doneCount = CURRENT_CASE.items.filter(function (i) { return i.ピッキング済数 >= i.必要数; }).length;
+    CURRENT_CASE.caseInfo.完了品目数 = doneCount;
+    document.getElementById('caseSummary').textContent = '品目：' + doneCount + ' / ' + CURRENT_CASE.items.length + ' 完了';
+    var staffList = CURRENT_CASE.caseInfo.担当者一覧 || [];
+    document.getElementById('caseStaffList').textContent = staffList.length ? '担当：' + staffList.join('、') : '担当：未着手';
+    var reasonEl = document.getElementById('caseReasonLine');
+    var reason = CURRENT_CASE.caseInfo.要確認理由;
+    reasonEl.style.display = reason ? 'block' : 'none';
+    reasonEl.textContent = reason ? '要確認理由：' + reason : '';
+  }
+
+  function renderItemList() {
+    var html = '';
+    CURRENT_CASE.items.forEach(function (it) {
+      var done = it.ピッキング済数 >= it.必要数;
+      var focused = FOCUSED_BARCODE === it.バーコード;
+      var cls = 'list-item item-row' + (done ? ' done' : '') + (focused ? ' focused' : '');
+      var staffText = (it.担当者一覧 && it.担当者一覧.length) ? it.担当者一覧.join('、') : '';
+      var revertBadge = it.差異フラグ === '差し戻し' ?
+        '<div class="item-staff-line warn-text">↩ 差し戻し済み' + (it.差異理由 ? '：' + escapeHtml(it.差異理由) : '') + '</div>' : '';
+      html += '<div class="' + cls + '" onclick="selectItem(\'' + jsStr(it.バーコード) + '\')">' +
+        '<div class="item-row-top">' +
+        '<div><div class="item-code">' + escapeHtml(it.バーコード) + '</div>' +
+        '<div class="item-name-sub">' + escapeHtml(it.品目名) + '</div></div>' +
+        '<div class="qty">' + it.ピッキング済数 + ' / ' + it.必要数 + '</div>' +
+        '</div>' +
+        (staffText ? '<div class="item-staff-line">担当：' + escapeHtml(staffText) + '</div>' : '') +
+        revertBadge +
+        (focused ? renderFocusedActions_() : '') +
+        '</div>';
+    });
+    document.getElementById('itemList').className = REQUEST_PENDING ? 'list-locked' : '';
+    document.getElementById('itemList').innerHTML = html;
+
+    if (FOCUSED_BARCODE) {
+      var el = document.querySelector('.list-item.focused');
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  function renderFocusedActions_() {
+    if (REQUEST_PENDING) return '<div class="processing-label">処理中...</div>';
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(FOCUSED_BARCODE); });
+    if (item && item.ピッキング済数 >= item.必要数) {
+      return '<div class="processing-label">ピッキング済みです（再度の操作はできません）</div>';
+    }
+    return '<button class="primary item-complete-btn" onclick="completeItem(\'' + jsStr(FOCUSED_BARCODE) + '\')">ピッキング終了</button>';
+  }
+
+  function selectItem(barcode) {
+    if (!CURRENT_CASE || REQUEST_PENDING) return;
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(barcode); });
+    if (!item) return;
+    FOCUSED_BARCODE = barcode;
+    renderItemList();
+  }
+
+  window.handleScan = function (code) {
+    if (!CURRENT_CASE || REQUEST_PENDING) return;
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(code); });
+    if (!item) {
+      showFlash('err', 'この案件の明細に含まれないバーコードです。');
+      return;
+    }
+    selectItem(item.バーコード);
+  };
+
+  function completeItem(barcode) {
+    if (!CURRENT_CASE || REQUEST_PENDING) return;
+    REQUEST_PENDING = true;
+    renderItemList();
+    apiPost('completePickingItem', { caseId: CURRENT_CASE.caseInfo.案件ID, barcode: barcode, staffId: STAFF.id })
+      .then(function (res) { REQUEST_PENDING = false; onCompleteResult(res); })
+      .catch(function (err) {
+        REQUEST_PENDING = false;
+        renderItemList();
+        showFlash('err', err.message || String(err));
+      });
+  }
+
+  function onCompleteResult(res) {
+    if (res.result === 'error') {
+      showFlash('err', res.message);
+      renderItemList();
+      return;
+    }
+    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(res.barcode); });
+    if (item) {
+      item.ピッキング済数 = res.picked;
+      item.担当者一覧 = item.担当者一覧 || [];
+      if (item.担当者一覧.indexOf(res.staffName) === -1) item.担当者一覧.push(res.staffName);
+    }
+    if (CURRENT_CASE.caseInfo.担当者一覧.indexOf(res.staffName) === -1) {
+      CURRENT_CASE.caseInfo.担当者一覧.push(res.staffName);
+    }
+    FOCUSED_BARCODE = null;
+    updateCaseSummary();
+    renderItemList();
+  }
+
+  function fatal(err) {
+    showListScreen();
+    document.getElementById('screen').innerHTML =
+      '<div class="card"><div class="error-banner">エラー：' + escapeHtml(err.message || String(err)) + '</div></div>';
+  }
+
+  /** バーコード文字列をシングルクォートのJS文字列リテラルとして安全に埋め込む */
+  function jsStr(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+</script>
+  <script src="scanner.js"></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+:root {
+  --blue:#1c5fa8; --blue-dark:#154a85; --bg:#f2f5f9; --line:#d7e0ea;
+  --ok:#1c8a4b; --err:#c62828; --warn:#8a6d00;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+  margin: 0; background: var(--bg); color: #1a1a1a; font-size: 17px; line-height: 1.6;
+}
+.header {
+  background: var(--blue); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 10;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.header h1 { font-size: 18px; margin: 0; font-weight: bold; white-space: nowrap; }
+.header .sub { font-size: 12px; color: #dce8f7; text-align: right; }
+.wrap { padding: 16px; max-width: 640px; margin: 0 auto; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+.card h2 { font-size: 17px; margin: 0 0 10px; }
+label { display: block; font-size: 14px; color: #555; margin-bottom: 6px; }
+select, input[type=text], input[type=number], button {
+  width: 100%; font-size: 18px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: #fff;
+}
+button.primary { background: var(--blue); color: #fff; border: none; font-weight: bold; }
+button.primary:active { background: var(--blue-dark); }
+button.secondary { background: #fff; border: 1px solid var(--blue); color: var(--blue); font-weight: bold; }
+button.danger { background: #fff; border: 1px solid var(--err); color: var(--err); font-weight: bold; }
+button:disabled { opacity: .5; }
+.menu-btn {
+  display: block; width: 100%; text-align: left; padding: 18px; font-size: 18px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; color: #222;
+  text-decoration: none; transition: transform .08s ease, opacity .08s ease;
+}
+/* タップした瞬間に押した感が分かるように（-webkit-tap-highlight-colorを消しているため代わりに用意） */
+.menu-btn:active, .list-item:active, .tabs button:active, .link-btn:active {
+  transform: scale(0.97); opacity: .7;
+}
+.list-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: #fff;
+  transition: transform .08s ease, opacity .08s ease;
+}
+.list-item.done { background: #eaf6ee; border-color: var(--ok); }
+.list-item.over { background: #fdeaea; border-color: var(--err); }
+.list-item.focused { border-color: var(--blue); border-width: 2px; box-shadow: 0 0 0 2px rgba(28,95,168,.15); }
+.item-name { font-weight: bold; }
+.qty { font-size: 20px; font-weight: bold; white-space: nowrap; margin-left: 12px; }
+
+/* ピッキング/チェック画面：品目行（バーコード上・品目名下、同じ文字サイズ、タップで選択） */
+.item-row { flex-direction: column; align-items: stretch; cursor: pointer; }
+.item-row-top { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.item-code { color: var(--err); font-size: 17px; font-weight: bold; }
+.item-name-sub { font-size: 17px; color: #222; margin-top: 2px; }
+.item-staff-line { font-size: 13px; color: #777; margin-top: 4px; }
+.item-complete-btn { margin-top: 12px; }
+.item-revert-btn { margin-top: 8px; }
+.processing-label { margin-top: 10px; color: #777; font-size: 15px; text-align: center; }
+/* 反映待ちの間、選択中以外の品目行を操作不可にする */
+.list-locked .list-item:not(.focused) { pointer-events: none; opacity: .5; }
+
+/* ピッキング/チェック画面：案件一覧（左詰め、1行1項目） */
+.case-row { flex-direction: column; align-items: flex-start; text-align: left; cursor: pointer; }
+.case-row .case-line { width: 100%; margin-bottom: 2px; }
+.case-row .case-line:last-child { margin-bottom: 0; }
+/* 案件タップ後、詳細を読み込んでいる間の見た目のフィードバックと二重タップ防止 */
+.case-row.opening { opacity: .6; }
+.case-list-loading .list-item:not(.opening) { pointer-events: none; opacity: .5; }
+
+/* ピッキング/チェック画面：上部固定エリア（ヘッダー＋案件情報＋スキャン欄） */
+.sticky-top { position: sticky; top: 0; z-index: 20; background: var(--bg); }
+.detail-inner { padding: 12px 16px 8px; max-width: 640px; margin: 0 auto; }
+.card.compact { padding: 12px 16px; margin-bottom: 8px; }
+.summary-line { font-size: 14px; color: #333; margin-top: 6px; }
+.muted { color: #777; font-size: 14px; }
+.loading { text-align: center; padding: 40px; color: #777; }
+.badge { display:inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; }
+.badge.status-未着手 { background:#eee; color:#555; }
+.badge.status-ピッキング中, .badge.status-チェック中 { background:#fff3cd; color:#8a6d00; }
+.badge.status-ピッキング完了 { background:#e0ecff; color:#1c5fa8; }
+.badge.status-要確認 { background:#fdeaea; color:#c62828; }
+.badge.status-出荷可 { background:#e6f6ea; color:#1c8a4b; }
+.badge.status-差し戻し { background:#fdeaea; color:#c62828; }
+.warn-text { color:#c62828; font-size:13px; }
+.flash {
+  position: fixed; inset: 0; display:flex; align-items:center; justify-content:center;
+  font-size: 26px; font-weight: bold; color:#fff; z-index: 999; pointer-events:none;
+  opacity: 0; transition: opacity .15s; text-align: center; padding: 20px;
+}
+.flash.show { opacity: 1; }
+.flash.ok { background: rgba(28,138,75,.94); }
+.flash.warn { background: rgba(138,109,0,.94); }
+.flash.err { background: rgba(198,40,40,.94); }
+.scan-box { margin-bottom: 16px; }
+.scan-input { font-size: 22px; text-align: center; margin-bottom: 8px; }
+.camera-btn { background:#fff; border: 1px solid var(--blue); color: var(--blue); font-weight: bold; margin-top: 0; }
+.scan-video { width: 100%; border-radius: 10px; margin-top: 8px; }
+.warn-banner { background:#fff3cd; color:#8a6d00; padding: 12px; border-radius: 10px; margin-bottom: 14px; font-weight:bold; }
+.error-banner { background:#fdeaea; color:#c62828; padding: 12px; border-radius: 10px; margin-bottom: 14px; font-weight:bold; }
+.ok-banner { background:#e6f6ea; color:#1c8a4b; padding: 12px; border-radius: 10px; margin-bottom: 14px; font-weight:bold; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.tabs button { flex: 1; }
+.tabs button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
