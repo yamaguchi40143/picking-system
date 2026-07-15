@@ -67,10 +67,13 @@ button:disabled { opacity: .5; }
 
 /* ピッキング/チェック画面：上部固定エリア（ヘッダー＋案件情報＋スキャン欄） */
 .sticky-top { position: sticky; top: 0; z-index: 20; background: var(--bg); }
-.detail-inner { padding: 12px 16px 8px; max-width: 640px; margin: 0 auto; }
-.card.compact { padding: 12px 16px; margin-bottom: 8px; }
-.summary-line { font-size: 14px; color: #333; margin-top: 6px; }
+.detail-inner { padding: 8px 16px 6px; max-width: 640px; margin: 0 auto; }
+.card.compact { padding: 8px 14px; margin-bottom: 6px; }
+.card.compact h2 { font-size: 16px; margin: 0 0 2px; }
+.summary-line { font-size: 13px; color: #333; margin-top: 3px; }
 .muted { color: #777; font-size: 14px; }
+.card.compact .muted { font-size: 13px; }
+.card.compact .muted div { margin: 0; }
 .loading { text-align: center; padding: 40px; color: #777; }
 .badge { display:inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; }
 .badge.status-未着手 { background:#eee; color:#555; }
@@ -89,9 +92,15 @@ button:disabled { opacity: .5; }
 .flash.ok { background: rgba(28,138,75,.94); }
 .flash.warn { background: rgba(138,109,0,.94); }
 .flash.err { background: rgba(198,40,40,.94); }
-.scan-box { margin-bottom: 16px; }
-.scan-input { font-size: 22px; text-align: center; margin-bottom: 8px; }
-.camera-btn { background:#fff; border: 1px solid var(--blue); color: var(--blue); font-weight: bold; margin-top: 0; }
+.scan-box { margin-bottom: 8px; }
+.scan-row { display: flex; align-items: stretch; gap: 8px; }
+.scan-input { font-size: 20px; text-align: center; }
+/* input[type=text]の共通ルール（width:100%）より詳細度を上げて確実に上書きする */
+.scan-row input.scan-input { flex: 1; min-width: 0; width: auto; }
+.camera-btn {
+  background:#fff; border: 1px solid var(--blue); color: var(--blue); font-weight: bold;
+  flex: none; width: 52px; padding: 0; font-size: 22px; line-height: 1;
+}
 .scan-video { width: 100%; border-radius: 10px; margin-top: 8px; }
 .warn-banner { background:#fff3cd; color:#8a6d00; padding: 12px; border-radius: 10px; margin-bottom: 14px; font-weight:bold; }
 .error-banner { background:#fdeaea; color:#c62828; padding: 12px; border-radius: 10px; margin-bottom: 14px; font-weight:bold; }
