@@ -68,14 +68,12 @@
       // 先読みが間に合っていない場合はこの場で読み込むが、Safariではユーザー操作から
       // 間が空くため権限が下りない可能性がある（先読みが完了していれば通常はここに来ない）
       cameraBtn.disabled = true;
-      cameraBtn.textContent = '起動中...';
       loadZXing().then(function () {
         zxingReady = true;
         cameraBtn.disabled = false;
         startZXingCameraNow();
       }).catch(function () {
         cameraBtn.disabled = false;
-        cameraBtn.textContent = '📷 カメラでスキャン';
         alert('バーコード読み取りライブラリの読み込みに失敗しました。通信環境をご確認のうえ再度お試しください。');
       });
     }
@@ -88,7 +86,7 @@
         video.srcObject = s;
         video.style.display = 'block';
         video.play();
-        cameraBtn.textContent = '✕ カメラを閉じる';
+        cameraBtn.textContent = '✕';
         detecting = true;
         var detector = new BarcodeDetector();
         var loop = function () {
@@ -96,7 +94,11 @@
           detector.detect(video).then(function (codes) {
             if (codes && codes.length > 0) {
               submitScan(codes[0].rawValue);
-              stopCamera();
+              // スキャン直後にfocusInput()を呼ぶと、iOS等でキーボード表示に伴う自動スクロールが
+              // 発生し、選択した品目の行にscrollIntoViewした位置がずれてしまう（該当品目より
+              // 下の行が選択されているように見える不具合）。カメラ由来のスキャンは物理キーボード
+              // 入力が不要なため、ここでは入力欄の再フォーカスをスキップする。
+              stopCamera(true);
               return;
             }
             requestAnimationFrame(loop);
@@ -124,12 +126,13 @@
         video.srcObject = s;
         video.style.display = 'block';
         video.play();
-        cameraBtn.textContent = '✕ カメラを閉じる';
+        cameraBtn.textContent = '✕';
         zxingReader = new ZXing.BrowserMultiFormatReader();
         zxingReader.decodeFromStream(s, video, function (result) {
           if (result) {
             submitScan(result.getText());
-            stopCamera();
+            // 理由はstartNativeCamera側のコメントを参照（iOS等でのフォーカス起因のスクロールずれ回避）
+            stopCamera(true);
           }
           // result が無い呼び出し（コード未検出）は毎フレーム発生しうるので無視する
         });
@@ -159,7 +162,11 @@
     return zxingLoadPromise;
   }
 
-  function stopCamera() {
+  /**
+   * skipFocus=trueの場合、入力欄への再フォーカスを行わない
+   * （カメラでのスキャン成功直後に使う。理由はstartNativeCamera内のコメント参照）。
+   */
+  function stopCamera(skipFocus) {
     detecting = false;
     if (stream) {
       stream.getTracks().forEach(function (t) { t.stop(); });
@@ -171,7 +178,7 @@
     }
     video.style.display = 'none';
     cameraBtn.disabled = false;
-    cameraBtn.textContent = '📷 カメラでスキャン';
-    focusInput();
+    cameraBtn.textContent = '📷';
+    if (!skipFocus) focusInput();
   }
 })();
