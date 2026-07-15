@@ -12,14 +12,14 @@
       <h1>✅ チェック画面</h1>
       <div class="sub" id="staffBar"></div>
     </div>
+    <div class="top-link-row">
+      <a class="muted link-btn" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
+    </div>
     <div id="flash" class="flash"></div>
 
     <div id="detailBar" style="display:none">
       <div class="detail-inner">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <a class="muted link-btn" href="#" onclick="loadCaseList(); return false;">← 案件一覧に戻る</a>
-          <a class="muted link-btn" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
-        </div>
+        <a class="muted link-btn" href="#" onclick="loadCaseList(); return false;">← 案件一覧に戻る</a>
         <div class="card compact">
           <h2 id="caseTitle"></h2>
           <div class="muted" id="caseSub"></div>
@@ -29,15 +29,6 @@
         </div>
         <div id="samePersonWarning" class="warn-banner" style="display:none">
           ⚠ ピッキング担当者とチェック担当者が同一人物です。相互チェックが機能しません。
-        </div>
-        <div class="scan-box">
-          <div class="scan-row">
-            <input type="text" id="scanInput" class="scan-input" inputmode="text"
-                   autocomplete="off" autocapitalize="off" spellcheck="false"
-                   placeholder="バーコードをスキャン、または入力してEnter">
-            <button type="button" id="cameraBtn" class="camera-btn" aria-label="カメラでスキャン">📷</button>
-          </div>
-          <video id="scanVideo" class="scan-video" style="display:none" playsinline muted></video>
         </div>
       </div>
     </div>
@@ -265,16 +256,6 @@
     renderItemList();
   }
 
-  window.handleScan = function (code) {
-    if (!CURRENT_CASE || REQUEST_PENDING) return;
-    var item = CURRENT_CASE.items.find(function (i) { return String(i.バーコード) === String(code); });
-    if (!item) {
-      showFlash('err', 'ピッキング明細に含まれないバーコードです。');
-      return;
-    }
-    selectItem(item.バーコード);
-  };
-
   function completeItem(barcode) {
     if (!CURRENT_CASE || REQUEST_PENDING) return;
     REQUEST_PENDING = true;
@@ -362,6 +343,5 @@
     return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   }
 </script>
-  <script src="scanner.js"></script>
 </body>
 </html>
