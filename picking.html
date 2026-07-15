@@ -48,7 +48,7 @@
         </div>
         <div class="scan-box">
           <div class="scan-row">
-            <input type="text" id="scanInput" class="scan-input" inputmode="text"
+            <input type="text" id="scanInput" class="scan-input" inputmode="numeric"
                    autocomplete="off" autocapitalize="off" spellcheck="false"
                    placeholder="バーコードをスキャン、または入力してEnter">
             <button type="button" id="cameraBtn" class="camera-btn" aria-label="カメラでスキャン">📷</button>
@@ -156,6 +156,7 @@
       html += '<div class="list-item case-row" onclick="openCase(\'' + c.案件ID + '\', this)">' +
         '<div class="case-line item-name">' + escapeHtml(c.発注所属名 || c.宛先氏名 || c.案件ID) + '</div>' +
         (c.物件名 ? '<div class="case-line muted">物件名：' + escapeHtml(c.物件名) + '</div>' : '') +
+        (c.契約番号 ? '<div class="case-line muted">契約番号：' + escapeHtml(c.契約番号) + '</div>' : '') +
         '<div class="case-line muted">出荷指定日：' + escapeHtml(c.出荷指定日) + '</div>' +
         '<div class="case-line muted">品目：' + c.完了品目数 + ' / ' + c.品目数 + '</div>' +
         '<div class="case-line muted">担当：' + escapeHtml(staffText) + '</div>' +
@@ -197,7 +198,7 @@
     document.getElementById('caseTitle').textContent = data.caseInfo.発注所属名 || data.caseInfo.宛先氏名;
     document.getElementById('caseSub').innerHTML =
       (data.caseInfo.物件名 ? '<div>物件名：' + escapeHtml(data.caseInfo.物件名) + '</div>' : '') +
-      '<div>出荷指定日：' + escapeHtml(data.caseInfo.出荷指定日 || '') + '</div>';
+      (data.caseInfo.契約番号 ? '<div>契約番号：' + escapeHtml(data.caseInfo.契約番号) + '</div>' : '');
     updateCaseSummary();
     showDetailScreen();
     renderItemList();
@@ -229,9 +230,9 @@
         '<div class="item-row-top">' +
         '<div><div class="item-code">' + escapeHtml(it.バーコード) + '</div>' +
         '<div class="item-name-sub">' + escapeHtml(it.品目名) + '</div></div>' +
-        '<div class="qty">' + it.ピッキング済数 + ' / ' + it.必要数 + '</div>' +
+        '<div class="qty">' + it.必要数 + '</div>' +
         '</div>' +
-        (it.保管区コード ? '<div class="item-staff-line">保管区：' + escapeHtml(it.保管区コード) + '</div>' : '') +
+        (it.保管区コード ? '<div class="item-zone-line">保管区：' + escapeHtml(it.保管区コード) + '</div>' : '') +
         (staffText ? '<div class="item-staff-line">担当：' + escapeHtml(staffText) + '</div>' : '') +
         revertBadge +
         (focused ? renderFocusedActions_() : '') +
@@ -267,6 +268,14 @@
     FOCUSED_BARCODE = barcode;
     renderItemList();
   }
+
+  // 品目行以外の場所をタップしたら選択を解除する（展開していたボタン類を閉じる）
+  document.addEventListener('click', function (e) {
+    if (!FOCUSED_BARCODE || REQUEST_PENDING) return;
+    if (e.target.closest && e.target.closest('.list-item')) return;
+    FOCUSED_BARCODE = null;
+    renderItemList();
+  });
 
   window.handleScan = function (code) {
     if (!CURRENT_CASE || REQUEST_PENDING) return;
