@@ -24,14 +24,15 @@
           <h2 id="caseTitle"></h2>
           <div class="muted" id="caseSub"></div>
           <div class="summary-line" id="caseSummary"></div>
-          <div class="muted" id="caseStaffList"></div>
           <div class="warn-text" id="caseReasonLine" style="display:none"></div>
         </div>
         <div class="scan-box">
-          <input type="text" id="scanInput" class="scan-input" inputmode="text"
-                 autocomplete="off" autocapitalize="off" spellcheck="false"
-                 placeholder="バーコードをスキャン、または入力してEnter">
-          <button type="button" id="cameraBtn" class="camera-btn">📷 カメラでスキャン</button>
+          <div class="scan-row">
+            <input type="text" id="scanInput" class="scan-input" inputmode="text"
+                   autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="バーコードをスキャン、または入力してEnter">
+            <button type="button" id="cameraBtn" class="camera-btn" aria-label="カメラでスキャン">📷</button>
+          </div>
           <video id="scanVideo" class="scan-video" style="display:none" playsinline muted></video>
         </div>
       </div>
@@ -113,7 +114,9 @@
     FOCUSED_BARCODE = null;
     CASE_OPENING = false;
     showListScreen();
-    document.getElementById('screen').innerHTML = '<div class="loading">案件を読み込み中...</div>';
+    var screenEl = document.getElementById('screen');
+    screenEl.classList.remove('case-list-loading');
+    screenEl.innerHTML = '<div class="loading">案件を読み込み中...</div>';
     apiGet('getPickableCases', {}).then(renderCaseList).catch(fatal);
   }
 
@@ -153,7 +156,11 @@
       el.insertAdjacentHTML('beforeend', '<div class="case-line muted">読み込み中...</div>');
     }
     apiGet('getPickingCase', { caseId: caseId })
-      .then(function (data) { CASE_OPENING = false; renderCase(data); })
+      .then(function (data) {
+        CASE_OPENING = false;
+        document.getElementById('screen').classList.remove('case-list-loading');
+        renderCase(data);
+      })
       .catch(function (err) {
         CASE_OPENING = false;
         document.getElementById('screen').classList.remove('case-list-loading');
@@ -177,9 +184,10 @@
   function updateCaseSummary() {
     var doneCount = CURRENT_CASE.items.filter(function (i) { return i.ピッキング済数 >= i.必要数; }).length;
     CURRENT_CASE.caseInfo.完了品目数 = doneCount;
-    document.getElementById('caseSummary').textContent = '品目：' + doneCount + ' / ' + CURRENT_CASE.items.length + ' 完了';
     var staffList = CURRENT_CASE.caseInfo.担当者一覧 || [];
-    document.getElementById('caseStaffList').textContent = staffList.length ? '担当：' + staffList.join('、') : '担当：未着手';
+    document.getElementById('caseSummary').textContent =
+      '品目：' + doneCount + ' / ' + CURRENT_CASE.items.length + ' 完了' +
+      '　担当：' + (staffList.length ? staffList.join('、') : '未着手');
     var reasonEl = document.getElementById('caseReasonLine');
     var reason = CURRENT_CASE.caseInfo.要確認理由;
     reasonEl.style.display = reason ? 'block' : 'none';
