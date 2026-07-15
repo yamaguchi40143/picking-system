@@ -17,15 +17,24 @@
   // 判明した（GitHub Pagesにホストした同一コードでは問題無く動作することを実機で確認済み）。
   // この画面はGAS外にホストされている前提のため、iOSを特別扱いしてボタンを隠す処理は行わない。
 
-  function focusInput() {
-    if (input) input.focus();
-  }
-  window.addEventListener('load', focusInput);
-  document.addEventListener('click', function (e) {
-    // 外付けリーダーはどこにフォーカスがあってもキー入力を送るため、
-    // カメラボタン以外をタップしたら常に入力欄へフォーカスを戻す。
-    if (e.target !== cameraBtn) focusInput();
-  });
+  // 入力欄への自動フォーカスは行わない（自動でオンスクリーンキーボードが開いて邪魔になるため、
+  // ユーザー指示により撤去済み）。USB/Bluetoothバーコードリーダーを使う場合は、利用者が
+  // 最初に一度入力欄をタップしてから使う運用とする。
+
+  /**
+   * カメラ映像取得の制約。バーコードに近づいてもピントが合わせやすいよう、
+   * 連続オートフォーカス（advanced constraint、対応端末のみ有効）と、
+   * 高めの解像度（小さい/遠いバーコードでも読み取りやすくする）を指定する。
+   * advancedで指定した制約に非対応の端末でもエラーにはならず、単に無視される。
+   */
+  var CAMERA_CONSTRAINTS = {
+    video: {
+      facingMode: 'environment',
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      advanced: [{ focusMode: 'continuous' }]
+    }
+  };
 
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') {
@@ -80,7 +89,7 @@
   }
 
   function startNativeCamera() {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       .then(function (s) {
         stream = s;
         video.srcObject = s;
@@ -93,12 +102,12 @@
           if (!detecting) return;
           detector.detect(video).then(function (codes) {
             if (codes && codes.length > 0) {
+              // 先にカメラを閉じてレイアウトを確定させてから品目を選択・スクロールする。
+              // 逆順（先にsubmitScanで品目へscrollIntoVideoしてから後でvideoを非表示にする）だと、
+              // videoが消えてsticky-topの高さが縮む際にページ全体がずれ、スクロール済みの位置が
+              // 別の（下の）品目に重なって見えてしまう不具合があった。
+              stopCamera();
               submitScan(codes[0].rawValue);
-              // スキャン直後にfocusInput()を呼ぶと、iOS等でキーボード表示に伴う自動スクロールが
-              // 発生し、選択した品目の行にscrollIntoViewした位置がずれてしまう（該当品目より
-              // 下の行が選択されているように見える不具合）。カメラ由来のスキャンは物理キーボード
-              // 入力が不要なため、ここでは入力欄の再フォーカスをスキップする。
-              stopCamera(true);
               return;
             }
             requestAnimationFrame(loop);
@@ -120,7 +129,7 @@
    * 取得済みのストリームをdecodeFromStreamでZXingに渡してデコードだけを任せる。
    */
   function startZXingCameraNow() {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       .then(function (s) {
         stream = s;
         video.srcObject = s;
@@ -130,9 +139,9 @@
         zxingReader = new ZXing.BrowserMultiFormatReader();
         zxingReader.decodeFromStream(s, video, function (result) {
           if (result) {
+            // 先にカメラを閉じてから品目を選択する（理由はstartNativeCamera側のコメント参照）
+            stopCamera();
             submitScan(result.getText());
-            // 理由はstartNativeCamera側のコメントを参照（iOS等でのフォーカス起因のスクロールずれ回避）
-            stopCamera(true);
           }
           // result が無い呼び出し（コード未検出）は毎フレーム発生しうるので無視する
         });
@@ -162,11 +171,7 @@
     return zxingLoadPromise;
   }
 
-  /**
-   * skipFocus=trueの場合、入力欄への再フォーカスを行わない
-   * （カメラでのスキャン成功直後に使う。理由はstartNativeCamera内のコメント参照）。
-   */
-  function stopCamera(skipFocus) {
+  function stopCamera() {
     detecting = false;
     if (stream) {
       stream.getTracks().forEach(function (t) { t.stop(); });
@@ -179,6 +184,5 @@
     video.style.display = 'none';
     cameraBtn.disabled = false;
     cameraBtn.textContent = '📷';
-    if (!skipFocus) focusInput();
   }
 })();
