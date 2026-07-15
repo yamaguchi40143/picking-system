@@ -5,21 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ピッキング画面</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    (function () {
+      // 日付が変わっていたら、端末に保存された担当者情報をクリアしてトップメニューへ戻す
+      // （日をまたいで前日の担当者名のまま使われ続けるのを防ぐ）
+      var now = new Date();
+      var todayStr = now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate();
+      var lastDate = localStorage.getItem('pickingActiveDate');
+      if (lastDate && lastDate !== todayStr) {
+        localStorage.removeItem('pickingStaffId');
+        localStorage.removeItem('pickingStaffName');
+        localStorage.removeItem('pickingActiveDate');
+        location.replace('index.html');
+        return;
+      }
+      localStorage.setItem('pickingActiveDate', todayStr);
+
+      // トップメニュー（index.html）を経由せずに直接このURLを開いた場合はトップメニューへ戻す
+      if (!sessionStorage.getItem('pickingAppEntered')) { location.replace('index.html'); }
+    })();
+  </script>
 </head>
 <body>
   <div class="sticky-top">
+    <div class="top-link-row">
+      <a id="backToListLink" class="muted link-btn" href="#" onclick="loadCaseList(); return false;" style="display:none">← 案件一覧に戻る</a>
+      <a class="muted link-btn top-menu-link" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
+    </div>
     <div class="header">
       <h1>📦 ピッキング画面</h1>
       <div class="sub" id="staffBar"></div>
-    </div>
-    <div class="top-link-row">
-      <a class="muted link-btn" href="index.html" onclick="return handleTopMenuClick();">トップメニューに戻る</a>
     </div>
     <div id="flash" class="flash"></div>
 
     <div id="detailBar" style="display:none">
       <div class="detail-inner">
-        <a class="muted link-btn" href="#" onclick="loadCaseList(); return false;">← 案件一覧に戻る</a>
         <div class="card compact">
           <h2 id="caseTitle"></h2>
           <div class="muted" id="caseSub"></div>
@@ -97,12 +117,14 @@
     document.getElementById('detailBar').style.display = 'none';
     document.getElementById('itemList').style.display = 'none';
     document.getElementById('screen').style.display = 'block';
+    document.getElementById('backToListLink').style.display = 'none';
   }
 
   function showDetailScreen() {
     document.getElementById('screen').style.display = 'none';
     document.getElementById('detailBar').style.display = 'block';
     document.getElementById('itemList').style.display = 'block';
+    document.getElementById('backToListLink').style.display = 'inline';
   }
 
   function loadCaseList() {
@@ -209,6 +231,7 @@
         '<div class="item-name-sub">' + escapeHtml(it.品目名) + '</div></div>' +
         '<div class="qty">' + it.ピッキング済数 + ' / ' + it.必要数 + '</div>' +
         '</div>' +
+        (it.保管区コード ? '<div class="item-staff-line">保管区：' + escapeHtml(it.保管区コード) + '</div>' : '') +
         (staffText ? '<div class="item-staff-line">担当：' + escapeHtml(staffText) + '</div>' : '') +
         revertBadge +
         (focused ? renderFocusedActions_() : '') +
@@ -218,8 +241,13 @@
     document.getElementById('itemList').innerHTML = html;
 
     if (FOCUSED_BARCODE) {
-      var el = document.querySelector('.list-item.focused');
-      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // iPhone Safariはツールバーの表示/非表示アニメーションが絡むと、smoothスクロールの
+      // 最終位置がずれる（該当品目より下の行に合ってしまう）ことがあるため、瞬間移動にし、
+      // カメラを閉じた直後のレイアウト変化が収まるよう一呼吸置いてから実行する。
+      setTimeout(function () {
+        var el = document.querySelector('.list-item.focused');
+        if (el) el.scrollIntoView({ block: 'center', behavior: 'auto' });
+      }, 80);
     }
   }
 
