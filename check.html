@@ -223,9 +223,10 @@
   function renderItemList() {
     var html = '';
     CURRENT_CASE.items.forEach(function (it) {
-      var done = it.ピッキング済数 > 0 && it.チェック済数 >= it.ピッキング済数;
+      var picked = it.ピッキング済数 > 0;
+      var done = picked && it.チェック済数 >= it.ピッキング済数;
       var focused = FOCUSED_BARCODE === it.バーコード;
-      var cls = 'list-item item-row' + (done ? ' done' : '') + (focused ? ' focused' : '');
+      var cls = 'list-item item-row' + (done ? ' done' : (picked ? ' picked' : '')) + (focused ? ' focused' : '');
       var pickerText = (it.ピッキング担当者一覧 && it.ピッキング担当者一覧.length) ? it.ピッキング担当者一覧.join('、') : '';
       var checkerText = (it.チェック担当者一覧 && it.チェック担当者一覧.length) ? it.チェック担当者一覧.join('、') : '';
       var staffLine = '';
@@ -237,9 +238,9 @@
         '<div class="item-row-top">' +
         '<div><div class="item-code">' + escapeHtml(it.バーコード) + '</div>' +
         '<div class="item-name-sub">' + escapeHtml(it.品目名) + '</div></div>' +
-        '<div class="qty">' + it.チェック済数 + ' / ' + it.ピッキング済数 + '</div>' +
+        '<div class="qty">' + it.ピッキング済数 + '</div>' +
         '</div>' +
-        (it.保管区コード ? '<div class="item-staff-line">保管区：' + escapeHtml(it.保管区コード) + '</div>' : '') +
+        (it.保管区コード ? '<div class="item-zone-line">保管区：' + escapeHtml(it.保管区コード) + '</div>' : '') +
         (staffLine ? '<div class="item-staff-line">' + staffLine + '</div>' : '') +
         revertBadge +
         (focused ? renderFocusedActions_() : '') +
@@ -278,6 +279,14 @@
     FOCUSED_BARCODE = barcode;
     renderItemList();
   }
+
+  // 品目行以外の場所をタップしたら選択を解除する（展開していたボタン類を閉じる）
+  document.addEventListener('click', function (e) {
+    if (!FOCUSED_BARCODE || REQUEST_PENDING) return;
+    if (e.target.closest && e.target.closest('.list-item')) return;
+    FOCUSED_BARCODE = null;
+    renderItemList();
+  });
 
   function completeItem(barcode) {
     if (!CURRENT_CASE || REQUEST_PENDING) return;
